@@ -227,4 +227,165 @@ export default function ChessBoard({ vsAI = false, initialBoard, highlightedSqua
             setCurrentPlayer(nextPlayer);
             setStatusMessage(
               vsAI && nextPlayer === "black"
-                ? "La
+                ? "La IA está pensando..."
+                : `Turno de las ${nextPlayer}.`,
+            );
+        }
+      } else if (piece && piece.color === currentPlayer) {
+        setSelectedSquare([row, col]);
+        setValidMoves(getValidMoves(row, col));
+      } else {
+        setSelectedSquare(null);
+        setValidMoves([]);
+      }
+    } else if (piece && piece.color === currentPlayer) {
+      setSelectedSquare([row, col]);
+      setValidMoves(getValidMoves(row, col));
+    }
+  };
+
+  const makeAIMove = () => {
+    let bestMove = null;
+    let maxScore = -Infinity;
+    const possibleMoves: { fromRow: number; fromCol: number; toRow: number; toCol: number }[] = [];
+
+    board.forEach((row, fromRow) => {
+        row.forEach((piece, fromCol) => {
+            if (piece?.color === "black") {
+                getValidMoves(fromRow, fromCol).forEach(([toRow, toCol]) => {
+                    const tempBoard = board.map(r => [...r]);
+                    tempBoard[toRow][toCol] = piece;
+                    tempBoard[fromRow][fromCol] = null;
+                    if (!isKingInCheck("black", tempBoard)) {
+                        possibleMoves.push({ fromRow, fromCol, toRow, toCol });
+                    }
+                });
+            }
+        });
+    });
+
+    if (possibleMoves.length === 0) {
+        setStatusMessage("La IA no tiene movimientos. ¡Has ganado!");
+        setGameOver(true);
+        setWinner("white");
+        return;
+    }
+
+    for (const move of possibleMoves) {
+        const targetPiece = board[move.toRow][move.toCol];
+        let score = targetPiece ? pieceValues[targetPiece.type] : Math.random() * 0.5;
+        if (score > maxScore) {
+            maxScore = score;
+            bestMove = move;
+        }
+    }
+
+    if (!bestMove) bestMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+
+    const { fromRow, fromCol, toRow, toCol } = bestMove;
+    const movingPiece = board[fromRow]?.[fromCol];
+
+    if (!movingPiece) return;
+
+    setBoard((prevBoard) => {
+        const updatedBoard = prevBoard.map((r) => [...r]);
+        updatedBoard[toRow][toCol] = movingPiece;
+        updatedBoard[fromRow][fromCol] = null;
+        
+        if (isKingInCheck("white", updatedBoard)) {
+            if (isCheckmate("white", updatedBoard)) {
+                setGameOver(true);
+                setWinner("black");
+                setStatusMessage("¡Jaque mate! La IA ha ganado.");
+            } else {
+                setStatusMessage("¡Jaque! Tu turno.");
+            }
+        } else {
+             setStatusMessage(`La IA movió su ${pieceNames[movingPiece.type]} a ${toNotation(toRow, toCol)}. Tu turno.`);
+        }
+        
+        return updatedBoard;
+    });
+
+    setCurrentPlayer("white");
+    setIsAITurn(false);
+  };
+
+  const resetGame = () => {
+    setBoard(createInitialBoard());
+    setSelectedSquare(null);
+    setValidMoves([]);
+    setCurrentPlayer("white");
+    setIsAITurn(false);
+    setGameOver(false);
+    setWinner(null);
+    setStatusMessage(
+      vsAI ? "Juegas con blancas. Haz tu primer movimiento." : "Selecciona una pieza para moverla."
+    );
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-6 w-full max-w-2xl">
+      <Card className="w-full space-y-4 p-4 md:p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary/70">
+              {vsAI ? "Modo contra inteligencia artificial" : "Modo libre"}
+            </p>
+            <div className="text-lg font-semibold">
+              Turno: <span className="text-primary capitalize">{currentPlayer === "white" ? "Blancas" : "Negras"}</span>
+            </div>
+          </div>
+          <Button onClick={resetGame} variant="outline" size="sm" className="self-start md:self-auto">
+            <RotateCcw className="mr-2 h-4 w-4" />
+            Reiniciar partida
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-8 overflow-hidden rounded-lg border-2 border-border shadow-lg">
+          {board.map((row, rowIndex) =>
+            row.map((piece, colIndex) => {
+              const isLight = (rowIndex + colIndex) % 2 === 0;
+              const isSelected = selectedSquare?.[0] === rowIndex && selectedSquare?.[1] === colIndex;
+              const isValidMoveSquare = validMoves.some(([r, c]) => r === rowIndex && c === colIndex);
+              const isHighlighted = highlightedSquares.some(([r, c]) => r === rowIndex && c === colIndex);
+
+              return (
+                <button
+                  key={`${rowIndex}-${colIndex}`}
+                  onClick={() => handleSquareClick(rowIndex, colIndex)}
+                  className={cn(
+                    "flex aspect-square items-center justify-center text-4xl md:text-5xl lg:text-6xl transition-all duration-200 hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+                    isLight ? "bg-accent" : "bg-primary/20",
+                    isSelected ? "ring-4 ring-primary ring-inset" : "",
+                    isValidMoveSquare ? "ring-4 ring-green-500/60 ring-inset" : "",
+                    isHighlighted ? "ring-4 ring-blue-500/60 ring-inset" : ""
+                  )}
+                >
+                  {piece && (
+                    <span className={piece.color === "white" ? "text-foreground" : "text-foreground/90"}>
+                      {pieceSymbols[piece.color][piece.type]}
+                    </span>
+                  )}
+                  {isValidMoveSquare && !piece && (
+                    <div className="h-3 w-3 rounded-full bg-green-500/60 md:h-4 md:w-4" />
+                  )}
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        <div className="space-y-2 text-center">
+          <p className="text-sm text-muted-foreground">{statusMessage}</p>
+          {vsAI && isAITurn && !gameOver && (
+            <div className="flex items-center justify-center gap-2 text-sm text-primary">
+              <Spinner className="h-4 w-4" />
+              <span>La IA está calculando su jugada...</span>
+            </div>
+          )}
+        </div>
+      </Card>
+    </div>
+  );
+}
