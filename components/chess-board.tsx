@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { RotateCcw } from "lucide-react"
-import { cn } from "@/lib/utils" // <-- ¡ESTA ES LA LÍNEA QUE FALTABA!
+import { cn } from "@/lib/utils"
 
 type PieceType = "pawn" | "rook" | "knight" | "bishop" | "queen" | "king"
 type PieceColor = "white" | "black"
@@ -22,6 +22,8 @@ interface ChessBoardProps {
   initialBoard?: Board;
   highlightedSquares?: [number, number][];
   isTutorial?: boolean;
+  onMove?: (moveNotation: string) => void;
+  onReset?: () => void;
 }
 
 const pieceSymbols: Record<PieceColor, Record<PieceType, string>> = {
@@ -30,7 +32,7 @@ const pieceSymbols: Record<PieceColor, Record<PieceType, string>> = {
 }
 
 const pieceNames: Record<PieceType, string> = {
-  pawn: "peón", rook: "torre", knight: "caballo", bishop: "alfil", queen: "dama", king: "rey",
+  pawn: "Peón", rook: "Torre", knight: "Caballo", bishop: "Alfil", queen: "Dama", king: "Rey",
 }
 
 const pieceValues: Record<PieceType, number> = {
@@ -47,7 +49,14 @@ const createInitialBoard = (): Board => [
   [{ type: "rook", color: "white" }, { type: "knight", color: "white" }, { type: "bishop", color: "white" }, { type: "queen", color: "white" }, { type: "king", color: "white" }, { type: "bishop", color: "white" }, { type: "knight", color: "white" }, { type: "rook", color: "white" }],
 ]
 
-export default function ChessBoard({ vsAI = false, initialBoard, highlightedSquares = [], isTutorial = false }: ChessBoardProps) {
+export default function ChessBoard({ 
+  vsAI = false, 
+  initialBoard, 
+  highlightedSquares = [], 
+  isTutorial = false,
+  onMove = () => {},
+  onReset = () => {}
+}: ChessBoardProps) {
   const [board, setBoard] = useState<Board>(() => initialBoard || createInitialBoard())
   const [selectedSquare, setSelectedSquare] = useState<[number, number] | null>(null)
   const [currentPlayer, setCurrentPlayer] = useState<PieceColor>("white")
@@ -65,10 +74,11 @@ export default function ChessBoard({ vsAI = false, initialBoard, highlightedSqua
       return;
     }
     setIsAITurn(true);
-    const timeout = setTimeout(() => makeAIMove(), 600);
+    const timeout = setTimeout(() => makeAIMove(), 800);
     return () => clearTimeout(timeout);
   }, [vsAI, currentPlayer, board, gameOver]);
 
+  // ... (Las funciones findKing, isSquareAttacked, isKingInCheck, etc. se mantienen igual)
   const findKing = (color: PieceColor, currentBoard: Board): [number, number] | null => {
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
@@ -189,149 +199,129 @@ export default function ChessBoard({ vsAI = false, initialBoard, highlightedSqua
   };
 
   const handleSquareClick = (row: number, col: number) => {
-    if (gameOver || isTutorial || (vsAI && isAITurn)) {
-      return;
-    }
-
-    const piece = board[row][col];
+    if (gameOver || isTutorial || (vsAI && isAITurn)) return;
 
     if (selectedSquare) {
-      const [selectedRow, selectedCol] = selectedSquare;
-      const selectedPiece = board[selectedRow][selectedCol];
+      const [fromRow, fromCol] = selectedSquare;
+      const piece = board[fromRow][fromCol];
 
-      if (validMoves.some(([r, c]) => r === row && c === col) && selectedPiece) {
-        const newBoard = board.map((r) => [...r]);
-        newBoard[row][col] = selectedPiece;
-        newBoard[selectedRow][selectedCol] = null;
-        
+      if (validMoves.some(([r, c]) => r === row && c === col) && piece) {
+        const newBoard = board.map(r => [...r]);
+        newBoard[row][col] = piece;
+        newBoard[fromRow][fromCol] = null;
+
         if (isKingInCheck(currentPlayer, newBoard)) {
-            setStatusMessage("Movimiento inválido: tu rey quedaría en jaque.");
-            return;
+          setStatusMessage("Movimiento inválido: tu rey quedaría en jaque.");
+          return;
         }
+
+        const moveNotation = `${pieceNames[piece.type]}: ${toNotation(fromRow, fromCol)} → ${toNotation(row, col)}`;
+        onMove(moveNotation);
 
         setBoard(newBoard);
         setSelectedSquare(null);
         setValidMoves([]);
-
-        const nextPlayer: PieceColor = currentPlayer === "white" ? "black" : "white";
+        const nextPlayer: PieceColor = "black";
         
         if (isKingInCheck(nextPlayer, newBoard)) {
-            if (isCheckmate(nextPlayer, newBoard)) {
-                setGameOver(true);
-                setWinner(currentPlayer);
-                setStatusMessage(`¡Jaque mate! Las ${currentPlayer === "white" ? "blancas" : "negras"} ganan.`);
-            } else {
-                setStatusMessage(`¡Jaque a las ${nextPlayer}!`);
-                setCurrentPlayer(nextPlayer);
-            }
-        } else {
+          if (isCheckmate(nextPlayer, newBoard)) {
+            setGameOver(true);
+            setWinner(currentPlayer);
+            setStatusMessage(`¡Jaque mate! Las blancas ganan.`);
+          } else {
+            setStatusMessage(`¡Jaque a las negras!`);
             setCurrentPlayer(nextPlayer);
-            setStatusMessage(
-              vsAI && nextPlayer === "black"
-                ? "La IA está pensando..."
-                : `Turno de las ${nextPlayer}.`,
-            );
+          }
+        } else {
+          setCurrentPlayer(nextPlayer);
+          setStatusMessage("La IA está pensando...");
         }
-      } else if (piece && piece.color === currentPlayer) {
-        setSelectedSquare([row, col]);
-        setValidMoves(getValidMoves(row, col));
       } else {
         setSelectedSquare(null);
         setValidMoves([]);
       }
-    } else if (piece && piece.color === currentPlayer) {
-      setSelectedSquare([row, col]);
-      setValidMoves(getValidMoves(row, col));
+    } else {
+      const piece = board[row][col];
+      if (piece && piece.color === currentPlayer) {
+        setSelectedSquare([row, col]);
+        setValidMoves(getValidMoves(row, col));
+      }
     }
   };
-
+  
   const makeAIMove = () => {
     let bestMove = null;
     let maxScore = -Infinity;
     const possibleMoves: { fromRow: number; fromCol: number; toRow: number; toCol: number }[] = [];
 
     board.forEach((row, fromRow) => {
-        row.forEach((piece, fromCol) => {
-            if (piece?.color === "black") {
-                getValidMoves(fromRow, fromCol).forEach(([toRow, toCol]) => {
-                    const tempBoard = board.map(r => [...r]);
-                    tempBoard[toRow][toCol] = piece;
-                    tempBoard[fromRow][fromCol] = null;
-                    if (!isKingInCheck("black", tempBoard)) {
-                        possibleMoves.push({ fromRow, fromCol, toRow, toCol });
-                    }
-                });
+      row.forEach((piece, fromCol) => {
+        if (piece?.color === "black") {
+          getValidMoves(fromRow, fromCol).forEach(([toRow, toCol]) => {
+            const tempBoard = board.map(r => [...r]);
+            tempBoard[toRow][toCol] = piece;
+            tempBoard[fromRow][fromCol] = null;
+            if (!isKingInCheck("black", tempBoard)) {
+              possibleMoves.push({ fromRow, fromCol, toRow, toCol });
             }
-        });
-    });
-
-    if (possibleMoves.length === 0) {
-        setStatusMessage("La IA no tiene movimientos. ¡Has ganado!");
-        setGameOver(true);
-        setWinner("white");
-        return;
-    }
-
-    for (const move of possibleMoves) {
-        const targetPiece = board[move.toRow][move.toCol];
-        let score = targetPiece ? pieceValues[targetPiece.type] : Math.random() * 0.5;
-        if (score > maxScore) {
-            maxScore = score;
-            bestMove = move;
+          });
         }
+      });
+    });
+  
+    if (possibleMoves.length === 0) {
+      setGameOver(true);
+      setWinner("white");
+      setStatusMessage("La IA no tiene movimientos. ¡Has ganado!");
+      return;
     }
-
+  
+    for (const move of possibleMoves) {
+      const targetPiece = board[move.toRow][move.toCol];
+      let score = targetPiece ? pieceValues[targetPiece.type] : Math.random() * 0.5;
+      if (score > maxScore) {
+        maxScore = score;
+        bestMove = move;
+      }
+    }
+  
     if (!bestMove) bestMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
-
+  
     const { fromRow, fromCol, toRow, toCol } = bestMove;
     const movingPiece = board[fromRow]?.[fromCol];
-
     if (!movingPiece) return;
-
-    setBoard((prevBoard) => {
-        const updatedBoard = prevBoard.map((r) => [...r]);
-        updatedBoard[toRow][toCol] = movingPiece;
-        updatedBoard[fromRow][fromCol] = null;
-        
-        if (isKingInCheck("white", updatedBoard)) {
-            if (isCheckmate("white", updatedBoard)) {
-                setGameOver(true);
-                setWinner("black");
-                setStatusMessage("¡Jaque mate! La IA ha ganado.");
-            } else {
-                setStatusMessage("¡Jaque! Tu turno.");
-            }
-        } else {
-             setStatusMessage(`La IA movió su ${pieceNames[movingPiece.type]} a ${toNotation(toRow, toCol)}. Tu turno.`);
-        }
-        
-        return updatedBoard;
-    });
-
+  
+    const moveNotation = `${pieceNames[movingPiece.type]}: ${toNotation(fromRow, fromCol)} → ${toNotation(toRow, toCol)}`;
+    onMove(moveNotation);
+  
+    const newBoard = board.map(r => [...r]);
+    newBoard[toRow][toCol] = movingPiece;
+    newBoard[fromRow][fromCol] = null;
+    setBoard(newBoard);
+  
+    if (isKingInCheck("white", newBoard)) {
+      if (isCheckmate("white", newBoard)) {
+        setGameOver(true);
+        setWinner("black");
+        setStatusMessage("¡Jaque mate! La IA ha ganado.");
+      } else {
+        setStatusMessage("¡Jaque! Tu turno.");
+      }
+    } else {
+      setStatusMessage(`La IA movió ${pieceNames[movingPiece.type]}. Tu turno.`);
+    }
+  
     setCurrentPlayer("white");
     setIsAITurn(false);
-  };
-
-  const resetGame = () => {
-    setBoard(createInitialBoard());
-    setSelectedSquare(null);
-    setValidMoves([]);
-    setCurrentPlayer("white");
-    setIsAITurn(false);
-    setGameOver(false);
-    setWinner(null);
-    setStatusMessage(
-      vsAI ? "Juegas con blancas. Haz tu primer movimiento." : "Selecciona una pieza para moverla."
-    );
   };
 
   return (
-    <div className="flex flex-col items-center gap-6 w-full max-w-2xl">
+    <div className="flex flex-col items-center gap-6 w-full max-w-2xl lg:max-w-none">
       <Card className="w-full space-y-4 p-4 md:p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-primary/70">
-              {isTutorial ? "Modo Tutorial" : (vsAI ? "Modo contra inteligencia artificial" : "Modo libre")}
+              {isTutorial ? "Modo Tutorial" : (vsAI ? "Modo contra IA" : "Modo libre")}
             </p>
             {!isTutorial && (
               <div className="text-lg font-semibold">
@@ -340,14 +330,14 @@ export default function ChessBoard({ vsAI = false, initialBoard, highlightedSqua
             )}
           </div>
           {!isTutorial && (
-            <Button onClick={resetGame} variant="outline" size="sm" className="self-start md:self-auto">
+            <Button onClick={onReset} variant="outline" size="sm" className="self-start md:self-auto">
               <RotateCcw className="mr-2 h-4 w-4" />
               Reiniciar partida
             </Button>
           )}
         </div>
 
-        <div className="grid grid-cols-8 overflow-hidden rounded-lg border-2 border-border shadow-lg">
+        <div className="grid grid-cols-8 overflow-hidden rounded-lg border-2 border-border shadow-lg aspect-square">
           {board.map((row, rowIndex) =>
             row.map((piece, colIndex) => {
               const isLight = (rowIndex + colIndex) % 2 === 0;
@@ -368,7 +358,7 @@ export default function ChessBoard({ vsAI = false, initialBoard, highlightedSqua
                   )}
                 >
                   {piece && (
-                    <span className={piece.color === "white" ? "text-foreground" : "text-foreground/90"}>
+                    <span className={cn("transition-transform duration-200", piece.color === "white" ? "text-foreground" : "text-foreground/90")}>
                       {pieceSymbols[piece.color][piece.type]}
                     </span>
                   )}
@@ -383,7 +373,7 @@ export default function ChessBoard({ vsAI = false, initialBoard, highlightedSqua
 
         {!isTutorial && (
           <div className="space-y-2 text-center">
-            <p className="text-sm text-muted-foreground">{statusMessage}</p>
+            <p className="text-sm text-muted-foreground min-h-[20px]">{statusMessage}</p>
             {vsAI && isAITurn && !gameOver && (
               <div className="flex items-center justify-center gap-2 text-sm text-primary">
                 <Spinner className="h-4 w-4" />
