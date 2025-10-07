@@ -5,12 +5,14 @@ import ChessBoard from "@/components/chess-board"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Brain, BookOpenCheck, Bot, GraduationCap, Users } from "lucide-react"
-import InteractiveTutorial from "./interactive-tutorial" // <-- Importa el nuevo componente
+import InteractiveTutorial from "./interactive-tutorial"
+import MoveHistoryPanel from "./move-history-panel" // <-- Importar el nuevo panel
 
 export function ChessExperience() {
   const [vsAI, setVsAI] = useState(true);
   const [boardKey, setBoardKey] = useState(0);
-  const [tutorialMode, setTutorialMode] = useState(false); // <-- Nuevo estado
+  const [tutorialMode, setTutorialMode] = useState(false);
+  const [moveHistory, setMoveHistory] = useState<string[]>([]); // <-- Nuevo estado para el historial
 
   const activeModeBadge = useMemo(
     () => (
@@ -24,6 +26,16 @@ export function ChessExperience() {
   const handleModeChange = (playAgainstAI: boolean) => {
     setVsAI(playAgainstAI);
     setBoardKey((prev) => prev + 1);
+    setMoveHistory([]); // Reiniciar historial al cambiar de modo
+  };
+
+  const handleReset = () => {
+    setBoardKey((prev) => prev + 1);
+    setMoveHistory([]);
+  };
+
+  const handleNewMove = (move: string) => {
+    setMoveHistory(prev => [...prev, move]);
   };
 
   return (
@@ -56,7 +68,19 @@ export function ChessExperience() {
         {tutorialMode ? (
             <InteractiveTutorial onExit={() => setTutorialMode(false)} />
         ) : (
-            <ChessBoard key={`${boardKey}-${vsAI}`} vsAI={vsAI} />
+          <div className="w-full grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-8 items-start">
+            <ChessBoard 
+              key={`${boardKey}-${vsAI}`} 
+              vsAI={vsAI} 
+              onMove={handleNewMove}
+              onReset={handleReset}
+            />
+            {vsAI && (
+              <div className="hidden lg:block">
+                <MoveHistoryPanel moves={moveHistory} />
+              </div>
+            )}
+          </div>
         )}
       </section>
 
