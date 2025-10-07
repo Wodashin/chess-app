@@ -80,44 +80,6 @@ export default function ChessBoard({
     return () => clearTimeout(timeout);
   }, [vsAI, currentPlayer, board, gameOver, promotionSquare]);
 
-  const findKing = (color: PieceColor, currentBoard: Board): [number, number] | null => {
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (currentBoard[r][c]?.type === "king" && currentBoard[r][c]?.color === color) return [r, c];
-    return null;
-  };
-
-  const isSquareAttacked = (row: number, col: number, attackerColor: PieceColor, currentBoard: Board): boolean => {
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (currentBoard[r][c]?.color === attackerColor && isValidMove(r, c, row, col, currentBoard[r][c]!, currentBoard)) return true;
-    return false;
-  };
-  
-  const isKingInCheck = (kingColor: PieceColor, currentBoard: Board): boolean => {
-    const kingPos = findKing(kingColor, currentBoard);
-    if (!kingPos) return false;
-    return isSquareAttacked(kingPos[0], kingPos[1], kingColor === "white" ? "black" : "white", currentBoard);
-  };
-  
-  const getAllLegalMovesForColor = (color: PieceColor, currentBoard: Board): { from: [number, number], to: [number, number] }[] => {
-    const allMoves: { from: [number, number], to: [number, number] }[] = [];
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        const piece = currentBoard[r][c];
-        if (piece?.color === color) {
-          getValidMoves(r, c).forEach(move => {
-            const tempBoard = currentBoard.map(row => [...row]);
-            tempBoard[move[0]][move[1]] = piece;
-            tempBoard[r][c] = null;
-            if (!isKingInCheck(color, tempBoard)) allMoves.push({ from: [r, c], to: move });
-          });
-        }
-      }
-    }
-    return allMoves;
-  };
-  
-  const isCheckmate = (kingColor: PieceColor, currentBoard: Board): boolean => {
-    return isKingInCheck(kingColor, currentBoard) && getAllLegalMovesForColor(kingColor, currentBoard).length === 0;
-  };
-
   const isValidMove = (fromRow: number, fromCol: number, toRow: number, toCol: number, piece: Piece, currentBoard: Board): boolean => {
     const targetPiece = currentBoard[toRow][toCol];
     if (targetPiece?.color === piece.color) return false;
@@ -148,13 +110,55 @@ export default function ChessBoard({
     }
     return true;
   };
-
-  const getValidMoves = (row: number, col: number): [number, number][] => {
-    const piece = board[row][col];
+  
+  // FUNCIÓN CORREGIDA: Ahora acepta un `boardState` para usarlo en las simulaciones
+  const getValidMoves = (row: number, col: number, boardState: Board): [number, number][] => {
+    const piece = boardState[row][col];
     if (!piece) return [];
     const moves: [number, number][] = [];
-    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (isValidMove(row, col, r, c, piece, board)) moves.push([r, c]);
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (isValidMove(row, col, r, c, piece, boardState)) moves.push([r, c]);
     return moves;
+  };
+
+  const findKing = (color: PieceColor, currentBoard: Board): [number, number] | null => {
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (currentBoard[r][c]?.type === "king" && currentBoard[r][c]?.color === color) return [r, c];
+    return null;
+  };
+
+  const isSquareAttacked = (row: number, col: number, attackerColor: PieceColor, currentBoard: Board): boolean => {
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (currentBoard[r][c]?.color === attackerColor && isValidMove(r, c, row, col, currentBoard[r][c]!, currentBoard)) return true;
+    return false;
+  };
+  
+  const isKingInCheck = (kingColor: PieceColor, currentBoard: Board): boolean => {
+    const kingPos = findKing(kingColor, currentBoard);
+    if (!kingPos) return false;
+    return isSquareAttacked(kingPos[0], kingPos[1], kingColor === "white" ? "black" : "white", currentBoard);
+  };
+  
+  // FUNCIÓN CORREGIDA: Ahora usa la nueva versión de getValidMoves
+  const getAllLegalMovesForColor = (color: PieceColor, currentBoard: Board): { from: [number, number], to: [number, number] }[] => {
+    const allMoves: { from: [number, number], to: [number, number] }[] = [];
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        const piece = currentBoard[r][c];
+        if (piece?.color === color) {
+          // Usa `currentBoard` para obtener los movimientos
+          const moves = getValidMoves(r, c, currentBoard); 
+          for (const move of moves) {
+            const tempBoard = currentBoard.map(row => [...row]);
+            tempBoard[move[0]][move[1]] = piece;
+            tempBoard[r][c] = null;
+            if (!isKingInCheck(color, tempBoard)) allMoves.push({ from: [r, c], to: move });
+          };
+        }
+      }
+    }
+    return allMoves;
+  };
+  
+  const isCheckmate = (kingColor: PieceColor, currentBoard: Board): boolean => {
+    return isKingInCheck(kingColor, currentBoard) && getAllLegalMovesForColor(kingColor, currentBoard).length === 0;
   };
 
   const finishMove = (finalBoard: Board) => {
@@ -170,8 +174,14 @@ export default function ChessBoard({
             setCurrentPlayer(nextPlayer);
         }
     } else {
-        setCurrentPlayer(nextPlayer);
-        setStatusMessage(vsAI && nextPlayer === "black" ? "La IA está pensando..." : `Turno de las ${nextPlayer}s.`);
+        if (getAllLegalMovesForColor(nextPlayer, finalBoard).length === 0) {
+            setGameOver(true);
+            setWinner(null); // Es un empate
+            setStatusMessage("¡Ahogado! La partida es un empate.");
+        } else {
+            setCurrentPlayer(nextPlayer);
+            setStatusMessage(vsAI && nextPlayer === "black" ? "La IA está pensando..." : `Turno de las ${nextPlayer}s.`);
+        }
     }
     setSelectedSquare(null);
     setValidMoves([]);
@@ -221,7 +231,7 @@ export default function ChessBoard({
       const piece = board[row][col];
       if (piece?.color === currentPlayer) {
         setSelectedSquare([row, col]);
-        setValidMoves(getValidMoves(row, col));
+        setValidMoves(getValidMoves(row, col, board)); // <-- CORREGIDO: Pasar el tablero actual
       }
     }
   };
@@ -238,8 +248,6 @@ export default function ChessBoard({
     }
 
     for (const move of possibleMoves) {
-        // LA LÍNEA DE ABAJO ES LA CORRECCIÓN. 
-        // Antes era `board[move.to.r][move.to.c]`, pero `move.to` es un array.
         const targetPiece = board[move.to[0]][move.to[1]];
         let score = targetPiece ? pieceValues[targetPiece.type] : Math.random() * 0.1;
         if (score > maxScore) { maxScore = score; bestMove = move; }
@@ -262,24 +270,13 @@ export default function ChessBoard({
         newBoard[toRow][toCol] = { type: 'queen', color: 'black' };
     }
 
-    setBoard(newBoard);
     setCurrentPlayer("white");
     setIsAITurn(false);
-    
-    if (isKingInCheck("white", newBoard)) {
-        if (isCheckmate("white", newBoard)) {
-            setGameOver(true); setWinner("black");
-            setStatusMessage("¡Jaque mate! La IA ha ganado.");
-        } else {
-            setStatusMessage("¡Jaque! Tu turno.");
-        }
-    } else {
-        setStatusMessage(`La IA movió ${pieceNames[movingPiece.type]}. Tu turno.`);
-    }
+    finishMove(newBoard); // Reutilizar la lógica de fin de movimiento
   };
-
+  
   const resetGame = () => {
-    onReset(); // Llama a la función del padre para limpiar el historial
+    onReset();
     setBoard(createInitialBoard());
     setSelectedSquare(null);
     setValidMoves([]);
