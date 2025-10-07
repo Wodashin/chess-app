@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { RotateCcw } from "lucide-react"
+import { cn } from "@/lib/utils" // <-- ¡ESTA ES LA LÍNEA QUE FALTABA!
 
 type PieceType = "pawn" | "rook" | "knight" | "bishop" | "queen" | "king"
 type PieceColor = "white" | "black"
@@ -330,16 +331,20 @@ export default function ChessBoard({ vsAI = false, initialBoard, highlightedSqua
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-primary/70">
-              {vsAI ? "Modo contra inteligencia artificial" : "Modo libre"}
+              {isTutorial ? "Modo Tutorial" : (vsAI ? "Modo contra inteligencia artificial" : "Modo libre")}
             </p>
-            <div className="text-lg font-semibold">
-              Turno: <span className="text-primary capitalize">{currentPlayer === "white" ? "Blancas" : "Negras"}</span>
-            </div>
+            {!isTutorial && (
+              <div className="text-lg font-semibold">
+                Turno: <span className="text-primary capitalize">{currentPlayer === "white" ? "Blancas" : "Negras"}</span>
+              </div>
+            )}
           </div>
-          <Button onClick={resetGame} variant="outline" size="sm" className="self-start md:self-auto">
-            <RotateCcw className="mr-2 h-4 w-4" />
-            Reiniciar partida
-          </Button>
+          {!isTutorial && (
+            <Button onClick={resetGame} variant="outline" size="sm" className="self-start md:self-auto">
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Reiniciar partida
+            </Button>
+          )}
         </div>
 
         <div className="grid grid-cols-8 overflow-hidden rounded-lg border-2 border-border shadow-lg">
@@ -376,15 +381,17 @@ export default function ChessBoard({ vsAI = false, initialBoard, highlightedSqua
           )}
         </div>
 
-        <div className="space-y-2 text-center">
-          <p className="text-sm text-muted-foreground">{statusMessage}</p>
-          {vsAI && isAITurn && !gameOver && (
-            <div className="flex items-center justify-center gap-2 text-sm text-primary">
-              <Spinner className="h-4 w-4" />
-              <span>La IA está calculando su jugada...</span>
-            </div>
-          )}
-        </div>
+        {!isTutorial && (
+          <div className="space-y-2 text-center">
+            <p className="text-sm text-muted-foreground">{statusMessage}</p>
+            {vsAI && isAITurn && !gameOver && (
+              <div className="flex items-center justify-center gap-2 text-sm text-primary">
+                <Spinner className="h-4 w-4" />
+                <span>La IA está calculando su jugada...</span>
+              </div>
+            )}
+          </div>
+        )}
       </Card>
     </div>
   );
