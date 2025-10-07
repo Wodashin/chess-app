@@ -8,11 +8,16 @@ import { RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { PromotionDialog } from "./ui/promotion-dialog"
 
-// ... (El resto de las importaciones y tipos se mantienen igual)
 type PieceType = "pawn" | "rook" | "knight" | "bishop" | "queen" | "king"
 type PieceColor = "white" | "black"
-interface Piece { type: PieceType; color: PieceColor }
+
+interface Piece {
+  type: PieceType
+  color: PieceColor
+}
+
 type Board = (Piece | null)[][]
+
 interface ChessBoardProps {
   vsAI?: boolean;
   initialBoard?: Board;
@@ -21,17 +26,22 @@ interface ChessBoardProps {
   onMove?: (moveNotation: string) => void;
   onReset?: () => void;
 }
+
 const pieceSymbols: Record<PieceColor, Record<PieceType, string>> = {
   white: { king: "♔", queen: "♕", rook: "♖", bishop: "♗", knight: "♘", pawn: "♙" },
   black: { king: "♚", queen: "♛", rook: "♜", bishop: "♝", knight: "♞", pawn: "♟" },
 }
+
 const pieceNames: Record<PieceType, string> = {
   pawn: "Peón", rook: "Torre", knight: "Caballo", bishop: "Alfil", queen: "Dama", king: "Rey",
 }
+
 const pieceValues: Record<PieceType, number> = {
   pawn: 1, knight: 3, bishop: 3, rook: 5, queen: 9, king: 1000,
 };
+
 const toNotation = (row: number, col: number) => `${String.fromCharCode(97 + col)}${8 - row}`
+
 const createInitialBoard = (): Board => [
     [{ type: "rook", color: "black" }, { type: "knight", color: "black" }, { type: "bishop", color: "black" }, { type: "queen", color: "black" }, { type: "king", color: "black" }, { type: "bishop", color: "black" }, { type: "knight", color: "black" }, { type: "rook", color: "black" }],
     Array(8).fill({ type: "pawn", color: "black" }),
@@ -48,7 +58,6 @@ export default function ChessBoard({
   onMove = () => {},
   onReset = () => {}
 }: ChessBoardProps) {
-    // ... (TODA la lógica y estados (useState, useEffect, funciones) se mantienen exactamente igual hasta el return)
   const [board, setBoard] = useState<Board>(() => initialBoard || createInitialBoard())
   const [selectedSquare, setSelectedSquare] = useState<[number, number] | null>(null)
   const [currentPlayer, setCurrentPlayer] = useState<PieceColor>("white")
@@ -87,8 +96,8 @@ export default function ChessBoard({
     return isSquareAttacked(kingPos[0], kingPos[1], kingColor === "white" ? "black" : "white", currentBoard);
   };
   
-  const getAllLegalMovesForColor = (color: PieceColor, currentBoard: Board): any[] => {
-    const allMoves = [];
+  const getAllLegalMovesForColor = (color: PieceColor, currentBoard: Board): { from: [number, number], to: [number, number] }[] => {
+    const allMoves: { from: [number, number], to: [number, number] }[] = [];
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
         const piece = currentBoard[r][c];
@@ -223,22 +232,26 @@ export default function ChessBoard({
 
     if (possibleMoves.length === 0) {
         setGameOver(true);
-        setWinner(isKingInCheck("black", board) ? "white" : null); // Si está en jaque es mate, si no, es ahogado (empate)
+        setWinner(isKingInCheck("black", board) ? "white" : null); 
         setStatusMessage(isKingInCheck("black", board) ? "La IA está en jaque mate. ¡Has ganado!" : "¡Ahogado! La partida es un empate.");
         return;
     }
 
-    possibleMoves.forEach(move => {
-        const targetPiece = board[move.to.r][move.to.c];
+    for (const move of possibleMoves) {
+        // LA LÍNEA DE ABAJO ES LA CORRECCIÓN. 
+        // Antes era `board[move.to.r][move.to.c]`, pero `move.to` es un array.
+        const targetPiece = board[move.to[0]][move.to[1]];
         let score = targetPiece ? pieceValues[targetPiece.type] : Math.random() * 0.1;
         if (score > maxScore) { maxScore = score; bestMove = move; }
-    });
+    }
+
+    if (!bestMove) bestMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
 
     const { from, to } = bestMove;
     const [fromRow, fromCol] = from, [toRow, toCol] = to;
     const movingPiece = board[fromRow][fromCol]!;
     
-    const moveNotation = `${pieceNames[movingPiece.type]}: ${toNotation(fromRow, fromCol)} → ${toNotation(toRow, col)}`;
+    const moveNotation = `${pieceNames[movingPiece.type]}: ${toNotation(fromRow, fromCol)} → ${toNotation(toRow, toCol)}`;
     onMove(moveNotation);
 
     const newBoard = board.map(r => [...r]);
@@ -254,18 +267,36 @@ export default function ChessBoard({
     setIsAITurn(false);
     
     if (isKingInCheck("white", newBoard)) {
-        setStatusMessage(isCheckmate("white", newBoard) ? "¡Jaque mate! La IA ha ganado." : "¡Jaque! Tu turno.");
+        if (isCheckmate("white", newBoard)) {
+            setGameOver(true); setWinner("black");
+            setStatusMessage("¡Jaque mate! La IA ha ganado.");
+        } else {
+            setStatusMessage("¡Jaque! Tu turno.");
+        }
     } else {
         setStatusMessage(`La IA movió ${pieceNames[movingPiece.type]}. Tu turno.`);
     }
   };
 
+  const resetGame = () => {
+    onReset(); // Llama a la función del padre para limpiar el historial
+    setBoard(createInitialBoard());
+    setSelectedSquare(null);
+    setValidMoves([]);
+    setCurrentPlayer("white");
+    setIsAITurn(false);
+    setGameOver(false);
+    setWinner(null);
+    setPromotionSquare(null);
+    setStatusMessage(
+      vsAI ? "Juegas con blancas. Haz tu primer movimiento." : "Selecciona una pieza para moverla."
+    );
+  };
+  
   return (
-    // Hemos quitado el max-w-* de aquí para que el contenedor padre lo controle
     <div className="flex flex-col items-center gap-4 w-full">
       {promotionSquare && <PromotionDialog color={currentPlayer} onSelectPiece={handlePromote} />}
       <Card className="w-full space-y-4 p-2 sm:p-4">
-        {/* ... (el resto del código del return se mantiene igual) ... */}
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-primary/70">
@@ -273,7 +304,7 @@ export default function ChessBoard({
             </p>
             {!isTutorial && <div className="text-base md:text-lg font-semibold">Turno: <span className="text-primary capitalize">{currentPlayer}</span></div>}
           </div>
-          {!isTutorial && <Button onClick={onReset} variant="outline" size="sm" className="self-start md:self-auto"><RotateCcw className="mr-2 h-4 w-4" />Reiniciar</Button>}
+          {!isTutorial && <Button onClick={resetGame} variant="outline" size="sm" className="self-start md:self-auto"><RotateCcw className="mr-2 h-4 w-4" />Reiniciar</Button>}
         </div>
 
         <div className="grid grid-cols-8 overflow-hidden rounded-md border shadow-lg aspect-square">
@@ -284,14 +315,7 @@ export default function ChessBoard({
             const isHighlighted = highlightedSquares.some(([r, c]) => r === rowIndex && c === colIndex);
             return (
               <button key={`${rowIndex}-${colIndex}`} onClick={() => handleSquareClick(rowIndex, colIndex)}
-                className={cn(
-                    // LÍNEA MODIFICADA: tamaños de texto ajustados
-                    "flex aspect-square items-center justify-center text-3xl sm:text-4xl lg:text-5xl",
-                    isLight ? "bg-accent" : "bg-primary/20",
-                    isSelected && "ring-2 md:ring-4 ring-primary ring-inset",
-                    isValidMoveSquare && "ring-2 md:ring-4 ring-green-500/60 ring-inset",
-                    isHighlighted && "ring-2 md:ring-4 ring-blue-500/60 ring-inset"
-                )}>
+                className={cn("flex aspect-square items-center justify-center text-3xl sm:text-4xl lg:text-5xl", isLight ? "bg-accent" : "bg-primary/20", isSelected && "ring-2 md:ring-4 ring-primary ring-inset", isValidMoveSquare && "ring-2 md:ring-4 ring-green-500/60 ring-inset", isHighlighted && "ring-2 md:ring-4 ring-blue-500/60 ring-inset")}>
                 {piece && <span className={cn("transition-transform duration-200", piece.color === "white" ? "text-foreground" : "text-foreground/90")}>{pieceSymbols[piece.color][piece.type]}</span>}
                 {isValidMoveSquare && !piece && <div className="h-2 w-2 md:h-3 md:w-3 rounded-full bg-green-500/60" />}
               </button>
