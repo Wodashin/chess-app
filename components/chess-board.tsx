@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { PromotionDialog } from "./ui/promotion-dialog" // <-- Importar el nuevo diálogo
 
 type PieceType = "pawn" | "rook" | "knight" | "bishop" | "queen" | "king"
 type PieceColor = "white" | "black"
@@ -67,49 +68,32 @@ export default function ChessBoard({
   const [isAITurn, setIsAITurn] = useState(false)
   const [gameOver, setGameOver] = useState(false);
   const [winner, setWinner] = useState<PieceColor | null>(null);
+  const [promotionSquare, setPromotionSquare] = useState<{ row: number; col: number } | null>(null);
 
   useEffect(() => {
-    if (gameOver || !vsAI || currentPlayer !== "black") {
+    if (gameOver || !vsAI || currentPlayer !== "black" || promotionSquare) {
       setIsAITurn(false);
       return;
     }
     setIsAITurn(true);
     const timeout = setTimeout(() => makeAIMove(), 800);
     return () => clearTimeout(timeout);
-  }, [vsAI, currentPlayer, board, gameOver]);
+  }, [vsAI, currentPlayer, board, gameOver, promotionSquare]);
 
-  // ... (Las funciones findKing, isSquareAttacked, isKingInCheck, etc. se mantienen igual)
   const findKing = (color: PieceColor, currentBoard: Board): [number, number] | null => {
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        const piece = currentBoard[r][c];
-        if (piece && piece.type === "king" && piece.color === color) {
-          return [r, c];
-        }
-      }
-    }
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (currentBoard[r][c]?.type === "king" && currentBoard[r][c]?.color === color) return [r, c];
     return null;
   };
 
   const isSquareAttacked = (row: number, col: number, attackerColor: PieceColor, currentBoard: Board): boolean => {
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        const piece = currentBoard[r][c];
-        if (piece && piece.color === attackerColor) {
-          if (isValidMove(r, c, row, col, piece, currentBoard)) {
-            return true;
-          }
-        }
-      }
-    }
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (currentBoard[r][c]?.color === attackerColor && isValidMove(r, c, row, col, currentBoard[r][c]!, currentBoard)) return true;
     return false;
   };
   
   const isKingInCheck = (kingColor: PieceColor, currentBoard: Board): boolean => {
     const kingPos = findKing(kingColor, currentBoard);
     if (!kingPos) return false;
-    const opponentColor = kingColor === "white" ? "black" : "white";
-    return isSquareAttacked(kingPos[0], kingPos[1], opponentColor, currentBoard);
+    return isSquareAttacked(kingPos[0], kingPos[1], kingColor === "white" ? "black" : "white", currentBoard);
   };
   
   const getAllLegalMovesForColor = (color: PieceColor, currentBoard: Board): any[] => {
@@ -117,17 +101,13 @@ export default function ChessBoard({
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
         const piece = currentBoard[r][c];
-        if (piece && piece.color === color) {
-          const moves = getValidMoves(r, c);
-          for (const move of moves) {
-            const [toRow, toCol] = move;
+        if (piece?.color === color) {
+          getValidMoves(r, c).forEach(move => {
             const tempBoard = currentBoard.map(row => [...row]);
-            tempBoard[toRow][toCol] = piece;
+            tempBoard[move[0]][move[1]] = piece;
             tempBoard[r][c] = null;
-            if (!isKingInCheck(color, tempBoard)) {
-              allMoves.push({ from: [r, c], to: move });
-            }
-          }
+            if (!isKingInCheck(color, tempBoard)) allMoves.push({ from: [r, c], to: move });
+          });
         }
       }
     }
@@ -135,51 +115,36 @@ export default function ChessBoard({
   };
   
   const isCheckmate = (kingColor: PieceColor, currentBoard: Board): boolean => {
-    if (!isKingInCheck(kingColor, currentBoard)) return false;
-    const legalMoves = getAllLegalMovesForColor(kingColor, currentBoard);
-    return legalMoves.length === 0;
+    return isKingInCheck(kingColor, currentBoard) && getAllLegalMovesForColor(kingColor, currentBoard).length === 0;
   };
 
   const isValidMove = (fromRow: number, fromCol: number, toRow: number, toCol: number, piece: Piece, currentBoard: Board): boolean => {
     const targetPiece = currentBoard[toRow][toCol];
-    if (targetPiece && targetPiece.color === piece.color) return false;
-    
-    const rowDiff = Math.abs(toRow - fromRow);
-    const colDiff = Math.abs(toCol - fromCol);
-
+    if (targetPiece?.color === piece.color) return false;
+    const rowDiff = Math.abs(toRow - fromRow), colDiff = Math.abs(toCol - fromCol);
     switch (piece.type) {
       case "pawn":
-        const direction = piece.color === "white" ? -1 : 1;
-        const startRow = piece.color === "white" ? 6 : 1;
+        const dir = piece.color === "white" ? -1 : 1, startRow = piece.color === "white" ? 6 : 1;
         if (fromCol === toCol && !targetPiece) {
-          if (toRow === fromRow + direction) return true;
-          if (fromRow === startRow && toRow === fromRow + 2 * direction && !currentBoard[fromRow + direction][fromCol]) return true;
+          if (toRow === fromRow + dir) return true;
+          if (fromRow === startRow && toRow === fromRow + 2 * dir && !currentBoard[fromRow + dir][fromCol]) return true;
         }
-        if (colDiff === 1 && toRow === fromRow + direction && targetPiece) return true;
-        return false;
-      case "rook":
-        return (fromRow === toRow || fromCol === toCol) && isPathClear(fromRow, fromCol, toRow, toCol, currentBoard);
-      case "knight":
-        return (rowDiff === 2 && colDiff === 1) || (rowDiff === 1 && colDiff === 2);
-      case "bishop":
-        return rowDiff === colDiff && isPathClear(fromRow, fromCol, toRow, toCol, currentBoard);
-      case "queen":
-        return (fromRow === toRow || fromCol === toCol || rowDiff === colDiff) && isPathClear(fromRow, fromCol, toRow, toCol, currentBoard);
-      case "king":
-        return rowDiff <= 1 && colDiff <= 1;
+        return colDiff === 1 && toRow === fromRow + dir && !!targetPiece;
+      case "rook": return (fromRow === toRow || fromCol === toCol) && isPathClear(fromRow, fromCol, toRow, toCol, currentBoard);
+      case "knight": return (rowDiff === 2 && colDiff === 1) || (rowDiff === 1 && colDiff === 2);
+      case "bishop": return rowDiff === colDiff && isPathClear(fromRow, fromCol, toRow, toCol, currentBoard);
+      case "queen": return (fromRow === toRow || fromCol === toCol || rowDiff === colDiff) && isPathClear(fromRow, fromCol, toRow, toCol, currentBoard);
+      case "king": return rowDiff <= 1 && colDiff <= 1;
       default: return false;
     }
   };
 
   const isPathClear = (fromRow: number, fromCol: number, toRow: number, toCol: number, currentBoard: Board): boolean => {
-    const rowStep = Math.sign(toRow - fromRow);
-    const colStep = Math.sign(toCol - fromCol);
-    let currentRow = fromRow + rowStep;
-    let currentCol = fromCol + colStep;
-    while (currentRow !== toRow || currentCol !== toCol) {
-      if (currentBoard[currentRow][currentCol]) return false;
-      currentRow += rowStep;
-      currentCol += colStep;
+    const rowStep = Math.sign(toRow - fromRow), colStep = Math.sign(toCol - fromCol);
+    let r = fromRow + rowStep, c = fromCol + colStep;
+    while (r !== toRow || c !== toCol) {
+      if (currentBoard[r][c]) return false;
+      r += rowStep; c += colStep;
     }
     return true;
   };
@@ -188,18 +153,41 @@ export default function ChessBoard({
     const piece = board[row][col];
     if (!piece) return [];
     const moves: [number, number][] = [];
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        if (isValidMove(row, col, r, c, piece, board)) {
-          moves.push([r, c]);
-        }
-      }
-    }
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (isValidMove(row, col, r, c, piece, board)) moves.push([r, c]);
     return moves;
   };
 
+  const finishMove = (finalBoard: Board) => {
+    const nextPlayer = currentPlayer === "white" ? "black" : "white";
+    setBoard(finalBoard);
+    if (isKingInCheck(nextPlayer, finalBoard)) {
+        if (isCheckmate(nextPlayer, finalBoard)) {
+            setGameOver(true);
+            setWinner(currentPlayer);
+            setStatusMessage(`¡Jaque mate! Las ${currentPlayer}s ganan.`);
+        } else {
+            setStatusMessage(`¡Jaque a las ${nextPlayer}s!`);
+            setCurrentPlayer(nextPlayer);
+        }
+    } else {
+        setCurrentPlayer(nextPlayer);
+        setStatusMessage(vsAI && nextPlayer === "black" ? "La IA está pensando..." : `Turno de las ${nextPlayer}s.`);
+    }
+    setSelectedSquare(null);
+    setValidMoves([]);
+  };
+
+  const handlePromote = (pieceType: PieceType) => {
+    if (!promotionSquare) return;
+    const { row, col } = promotionSquare;
+    const newBoard = board.map(r => [...r]);
+    newBoard[row][col] = { type: pieceType, color: currentPlayer };
+    setPromotionSquare(null);
+    finishMove(newBoard);
+  };
+  
   const handleSquareClick = (row: number, col: number) => {
-    if (gameOver || isTutorial || (vsAI && isAITurn)) return;
+    if (gameOver || isTutorial || (vsAI && isAITurn) || promotionSquare) return;
 
     if (selectedSquare) {
       const [fromRow, fromCol] = selectedSquare;
@@ -218,168 +206,103 @@ export default function ChessBoard({
         const moveNotation = `${pieceNames[piece.type]}: ${toNotation(fromRow, fromCol)} → ${toNotation(row, col)}`;
         onMove(moveNotation);
 
-        setBoard(newBoard);
-        setSelectedSquare(null);
-        setValidMoves([]);
-        const nextPlayer: PieceColor = "black";
-        
-        if (isKingInCheck(nextPlayer, newBoard)) {
-          if (isCheckmate(nextPlayer, newBoard)) {
-            setGameOver(true);
-            setWinner(currentPlayer);
-            setStatusMessage(`¡Jaque mate! Las blancas ganan.`);
-          } else {
-            setStatusMessage(`¡Jaque a las negras!`);
-            setCurrentPlayer(nextPlayer);
-          }
-        } else {
-          setCurrentPlayer(nextPlayer);
-          setStatusMessage("La IA está pensando...");
+        const promotionRank = currentPlayer === "white" ? 0 : 7;
+        if (piece.type === "pawn" && row === promotionRank) {
+          setBoard(newBoard);
+          setPromotionSquare({ row, col });
+          return;
         }
-      } else {
-        setSelectedSquare(null);
-        setValidMoves([]);
+
+        finishMove(newBoard);
       }
+      setSelectedSquare(null);
+      setValidMoves([]);
     } else {
       const piece = board[row][col];
-      if (piece && piece.color === currentPlayer) {
+      if (piece?.color === currentPlayer) {
         setSelectedSquare([row, col]);
         setValidMoves(getValidMoves(row, col));
       }
     }
   };
-  
-  const makeAIMove = () => {
-    let bestMove = null;
-    let maxScore = -Infinity;
-    const possibleMoves: { fromRow: number; fromCol: number; toRow: number; toCol: number }[] = [];
 
-    board.forEach((row, fromRow) => {
-      row.forEach((piece, fromCol) => {
-        if (piece?.color === "black") {
-          getValidMoves(fromRow, fromCol).forEach(([toRow, toCol]) => {
-            const tempBoard = board.map(r => [...r]);
-            tempBoard[toRow][toCol] = piece;
-            tempBoard[fromRow][fromCol] = null;
-            if (!isKingInCheck("black", tempBoard)) {
-              possibleMoves.push({ fromRow, fromCol, toRow, toCol });
-            }
-          });
-        }
-      });
-    });
-  
+  const makeAIMove = () => {
+    let bestMove: any = null, maxScore = -Infinity;
+    const possibleMoves = getAllLegalMovesForColor("black", board);
+
     if (possibleMoves.length === 0) {
-      setGameOver(true);
-      setWinner("white");
-      setStatusMessage("La IA no tiene movimientos. ¡Has ganado!");
-      return;
+        setGameOver(true);
+        setWinner(isKingInCheck("black", board) ? "white" : null); // Si está en jaque es mate, si no, es ahogado (empate)
+        setStatusMessage(isKingInCheck("black", board) ? "La IA está en jaque mate. ¡Has ganado!" : "¡Ahogado! La partida es un empate.");
+        return;
     }
-  
-    for (const move of possibleMoves) {
-      const targetPiece = board[move.toRow][move.toCol];
-      let score = targetPiece ? pieceValues[targetPiece.type] : Math.random() * 0.5;
-      if (score > maxScore) {
-        maxScore = score;
-        bestMove = move;
-      }
-    }
-  
-    if (!bestMove) bestMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
-  
-    const { fromRow, fromCol, toRow, toCol } = bestMove;
-    const movingPiece = board[fromRow]?.[fromCol];
-    if (!movingPiece) return;
-  
-    const moveNotation = `${pieceNames[movingPiece.type]}: ${toNotation(fromRow, fromCol)} → ${toNotation(toRow, toCol)}`;
+
+    possibleMoves.forEach(move => {
+        const targetPiece = board[move.to.r][move.to.c];
+        let score = targetPiece ? pieceValues[targetPiece.type] : Math.random() * 0.1;
+        if (score > maxScore) { maxScore = score; bestMove = move; }
+    });
+
+    const { from, to } = bestMove;
+    const [fromRow, fromCol] = from, [toRow, toCol] = to;
+    const movingPiece = board[fromRow][fromCol]!;
+    
+    const moveNotation = `${pieceNames[movingPiece.type]}: ${toNotation(fromRow, fromCol)} → ${toNotation(toRow, col)}`;
     onMove(moveNotation);
-  
+
     const newBoard = board.map(r => [...r]);
     newBoard[toRow][toCol] = movingPiece;
     newBoard[fromRow][fromCol] = null;
-    setBoard(newBoard);
-  
-    if (isKingInCheck("white", newBoard)) {
-      if (isCheckmate("white", newBoard)) {
-        setGameOver(true);
-        setWinner("black");
-        setStatusMessage("¡Jaque mate! La IA ha ganado.");
-      } else {
-        setStatusMessage("¡Jaque! Tu turno.");
-      }
-    } else {
-      setStatusMessage(`La IA movió ${pieceNames[movingPiece.type]}. Tu turno.`);
+
+    if (movingPiece.type === 'pawn' && toRow === 7) {
+        newBoard[toRow][toCol] = { type: 'queen', color: 'black' };
     }
-  
+
+    setBoard(newBoard);
     setCurrentPlayer("white");
     setIsAITurn(false);
+    
+    if (isKingInCheck("white", newBoard)) {
+        setStatusMessage(isCheckmate("white", newBoard) ? "¡Jaque mate! La IA ha ganado." : "¡Jaque! Tu turno.");
+    } else {
+        setStatusMessage(`La IA movió ${pieceNames[movingPiece.type]}. Tu turno.`);
+    }
   };
 
   return (
-    <div className="flex flex-col items-center gap-6 w-full max-w-2xl lg:max-w-none">
-      <Card className="w-full space-y-4 p-4 md:p-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div className="flex flex-col items-center gap-4 w-full">
+      {promotionSquare && <PromotionDialog color={currentPlayer} onSelectPiece={handlePromote} />}
+      <Card className="w-full space-y-4 p-2 sm:p-4 md:p-6">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-primary/70">
               {isTutorial ? "Modo Tutorial" : (vsAI ? "Modo contra IA" : "Modo libre")}
             </p>
-            {!isTutorial && (
-              <div className="text-lg font-semibold">
-                Turno: <span className="text-primary capitalize">{currentPlayer === "white" ? "Blancas" : "Negras"}</span>
-              </div>
-            )}
+            {!isTutorial && <div className="text-base md:text-lg font-semibold">Turno: <span className="text-primary capitalize">{currentPlayer}</span></div>}
           </div>
-          {!isTutorial && (
-            <Button onClick={onReset} variant="outline" size="sm" className="self-start md:self-auto">
-              <RotateCcw className="mr-2 h-4 w-4" />
-              Reiniciar partida
-            </Button>
-          )}
+          {!isTutorial && <Button onClick={onReset} variant="outline" size="sm" className="self-start md:self-auto"><RotateCcw className="mr-2 h-4 w-4" />Reiniciar</Button>}
         </div>
 
-        <div className="grid grid-cols-8 overflow-hidden rounded-lg border-2 border-border shadow-lg aspect-square">
-          {board.map((row, rowIndex) =>
-            row.map((piece, colIndex) => {
-              const isLight = (rowIndex + colIndex) % 2 === 0;
-              const isSelected = selectedSquare?.[0] === rowIndex && selectedSquare?.[1] === colIndex;
-              const isValidMoveSquare = validMoves.some(([r, c]) => r === rowIndex && c === colIndex);
-              const isHighlighted = highlightedSquares.some(([r, c]) => r === rowIndex && c === colIndex);
-
-              return (
-                <button
-                  key={`${rowIndex}-${colIndex}`}
-                  onClick={() => handleSquareClick(rowIndex, colIndex)}
-                  className={cn(
-                    "flex aspect-square items-center justify-center text-4xl md:text-5xl lg:text-6xl transition-all duration-200 hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
-                    isLight ? "bg-accent" : "bg-primary/20",
-                    isSelected ? "ring-4 ring-primary ring-inset" : "",
-                    isValidMoveSquare ? "ring-4 ring-green-500/60 ring-inset" : "",
-                    isHighlighted ? "ring-4 ring-blue-500/60 ring-inset" : ""
-                  )}
-                >
-                  {piece && (
-                    <span className={cn("transition-transform duration-200", piece.color === "white" ? "text-foreground" : "text-foreground/90")}>
-                      {pieceSymbols[piece.color][piece.type]}
-                    </span>
-                  )}
-                  {isValidMoveSquare && !piece && (
-                    <div className="h-3 w-3 rounded-full bg-green-500/60 md:h-4 md:w-4" />
-                  )}
-                </button>
-              );
-            })
-          )}
+        <div className="grid grid-cols-8 overflow-hidden rounded-md border shadow-lg aspect-square">
+          {board.map((row, rowIndex) => row.map((piece, colIndex) => {
+            const isLight = (rowIndex + colIndex) % 2 === 0;
+            const isSelected = selectedSquare?.[0] === rowIndex && selectedSquare?.[1] === colIndex;
+            const isValidMoveSquare = validMoves.some(([r, c]) => r === rowIndex && c === colIndex);
+            const isHighlighted = highlightedSquares.some(([r, c]) => r === rowIndex && c === colIndex);
+            return (
+              <button key={`${rowIndex}-${colIndex}`} onClick={() => handleSquareClick(rowIndex, colIndex)}
+                className={cn("flex aspect-square items-center justify-center text-3xl sm:text-4xl md:text-5xl lg:text-6xl", isLight ? "bg-accent" : "bg-primary/20", isSelected && "ring-4 ring-primary ring-inset", isValidMoveSquare && "ring-4 ring-green-500/60 ring-inset", isHighlighted && "ring-4 ring-blue-500/60 ring-inset")}>
+                {piece && <span className={cn("transition-transform duration-200", piece.color === "white" ? "text-foreground" : "text-foreground/90")}>{pieceSymbols[piece.color][piece.type]}</span>}
+                {isValidMoveSquare && !piece && <div className="h-2 w-2 md:h-3 md:w-3 rounded-full bg-green-500/60" />}
+              </button>
+            );
+          }))}
         </div>
 
         {!isTutorial && (
           <div className="space-y-2 text-center">
             <p className="text-sm text-muted-foreground min-h-[20px]">{statusMessage}</p>
-            {vsAI && isAITurn && !gameOver && (
-              <div className="flex items-center justify-center gap-2 text-sm text-primary">
-                <Spinner className="h-4 w-4" />
-                <span>La IA está calculando su jugada...</span>
-              </div>
-            )}
+            {vsAI && isAITurn && !gameOver && <div className="flex items-center justify-center gap-2 text-sm text-primary"><Spinner className="h-4 w-4" /><span>La IA está pensando...</span></div>}
           </div>
         )}
       </Card>
