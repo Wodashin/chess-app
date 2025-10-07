@@ -6,18 +6,13 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { PromotionDialog } from "./ui/promotion-dialog" // <-- Importar el nuevo diálogo
+import { PromotionDialog } from "./ui/promotion-dialog"
 
+// ... (El resto de las importaciones y tipos se mantienen igual)
 type PieceType = "pawn" | "rook" | "knight" | "bishop" | "queen" | "king"
 type PieceColor = "white" | "black"
-
-interface Piece {
-  type: PieceType
-  color: PieceColor
-}
-
+interface Piece { type: PieceType; color: PieceColor }
 type Board = (Piece | null)[][]
-
 interface ChessBoardProps {
   vsAI?: boolean;
   initialBoard?: Board;
@@ -26,28 +21,23 @@ interface ChessBoardProps {
   onMove?: (moveNotation: string) => void;
   onReset?: () => void;
 }
-
 const pieceSymbols: Record<PieceColor, Record<PieceType, string>> = {
   white: { king: "♔", queen: "♕", rook: "♖", bishop: "♗", knight: "♘", pawn: "♙" },
   black: { king: "♚", queen: "♛", rook: "♜", bishop: "♝", knight: "♞", pawn: "♟" },
 }
-
 const pieceNames: Record<PieceType, string> = {
   pawn: "Peón", rook: "Torre", knight: "Caballo", bishop: "Alfil", queen: "Dama", king: "Rey",
 }
-
 const pieceValues: Record<PieceType, number> = {
   pawn: 1, knight: 3, bishop: 3, rook: 5, queen: 9, king: 1000,
 };
-
 const toNotation = (row: number, col: number) => `${String.fromCharCode(97 + col)}${8 - row}`
-
 const createInitialBoard = (): Board => [
-  [{ type: "rook", color: "black" }, { type: "knight", color: "black" }, { type: "bishop", color: "black" }, { type: "queen", color: "black" }, { type: "king", color: "black" }, { type: "bishop", color: "black" }, { type: "knight", color: "black" }, { type: "rook", color: "black" }],
-  Array(8).fill({ type: "pawn", color: "black" }),
-  Array(8).fill(null), Array(8).fill(null), Array(8).fill(null), Array(8).fill(null),
-  Array(8).fill({ type: "pawn", color: "white" }),
-  [{ type: "rook", color: "white" }, { type: "knight", color: "white" }, { type: "bishop", color: "white" }, { type: "queen", color: "white" }, { type: "king", color: "white" }, { type: "bishop", color: "white" }, { type: "knight", color: "white" }, { type: "rook", color: "white" }],
+    [{ type: "rook", color: "black" }, { type: "knight", color: "black" }, { type: "bishop", color: "black" }, { type: "queen", color: "black" }, { type: "king", color: "black" }, { type: "bishop", color: "black" }, { type: "knight", color: "black" }, { type: "rook", color: "black" }],
+    Array(8).fill({ type: "pawn", color: "black" }),
+    Array(8).fill(null), Array(8).fill(null), Array(8).fill(null), Array(8).fill(null),
+    Array(8).fill({ type: "pawn", color: "white" }),
+    [{ type: "rook", color: "white" }, { type: "knight", color: "white" }, { type: "bishop", color: "white" }, { type: "queen", color: "white" }, { type: "king", color: "white" }, { type: "bishop", color: "white" }, { type: "knight", color: "white" }, { type: "rook", color: "white" }],
 ]
 
 export default function ChessBoard({ 
@@ -58,6 +48,7 @@ export default function ChessBoard({
   onMove = () => {},
   onReset = () => {}
 }: ChessBoardProps) {
+    // ... (TODA la lógica y estados (useState, useEffect, funciones) se mantienen exactamente igual hasta el return)
   const [board, setBoard] = useState<Board>(() => initialBoard || createInitialBoard())
   const [selectedSquare, setSelectedSquare] = useState<[number, number] | null>(null)
   const [currentPlayer, setCurrentPlayer] = useState<PieceColor>("white")
@@ -270,9 +261,11 @@ export default function ChessBoard({
   };
 
   return (
+    // Hemos quitado el max-w-* de aquí para que el contenedor padre lo controle
     <div className="flex flex-col items-center gap-4 w-full">
       {promotionSquare && <PromotionDialog color={currentPlayer} onSelectPiece={handlePromote} />}
-      <Card className="w-full space-y-4 p-2 sm:p-4 md:p-6">
+      <Card className="w-full space-y-4 p-2 sm:p-4">
+        {/* ... (el resto del código del return se mantiene igual) ... */}
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-primary/70">
@@ -291,7 +284,14 @@ export default function ChessBoard({
             const isHighlighted = highlightedSquares.some(([r, c]) => r === rowIndex && c === colIndex);
             return (
               <button key={`${rowIndex}-${colIndex}`} onClick={() => handleSquareClick(rowIndex, colIndex)}
-                className={cn("flex aspect-square items-center justify-center text-3xl sm:text-4xl md:text-5xl lg:text-6xl", isLight ? "bg-accent" : "bg-primary/20", isSelected && "ring-4 ring-primary ring-inset", isValidMoveSquare && "ring-4 ring-green-500/60 ring-inset", isHighlighted && "ring-4 ring-blue-500/60 ring-inset")}>
+                className={cn(
+                    // LÍNEA MODIFICADA: tamaños de texto ajustados
+                    "flex aspect-square items-center justify-center text-3xl sm:text-4xl lg:text-5xl",
+                    isLight ? "bg-accent" : "bg-primary/20",
+                    isSelected && "ring-2 md:ring-4 ring-primary ring-inset",
+                    isValidMoveSquare && "ring-2 md:ring-4 ring-green-500/60 ring-inset",
+                    isHighlighted && "ring-2 md:ring-4 ring-blue-500/60 ring-inset"
+                )}>
                 {piece && <span className={cn("transition-transform duration-200", piece.color === "white" ? "text-foreground" : "text-foreground/90")}>{pieceSymbols[piece.color][piece.type]}</span>}
                 {isValidMoveSquare && !piece && <div className="h-2 w-2 md:h-3 md:w-3 rounded-full bg-green-500/60" />}
               </button>
